@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Inventario con Firebase</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    .producto { border: 1px solid #ccc; padding: 10px; margin: 10px; display: inline-block; width: 200px; vertical-align: top; }
+    img { max-width: 100%; height: auto; }
+    #adminPanel { display: none; margin-top: 20px; }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <h1>Inventario Digital</h1>
+
+  <!-- Autenticación -->
+  <div id="loginPanel">
+    <h2>Acceso Administrador</h2>
+    <input type="email" id="email" placeholder="Correo"><br>
+    <input type="password" id="password" placeholder="Contraseña"><br>
+    <button onclick="login()">Ingresar</button>
+    <button onclick="register()">Registrar</button>
+  </div>
+
+  <div id="adminPanel">
+    <h2>Panel de Administrador</h2>
+    <button onclick="logout()">Cerrar sesión</button>
+    <h3>Agregar producto</h3>
+    <input type="text" id="nombre" placeholder="Nombre"><br>
+    <input type="number" id="precio" placeholder="Precio"><br>
+    <input type="number" id="unidades" placeholder="Unidades"><br>
+    <input type="file" id="imagen"><br>
+    <button onclick="agregarProducto()">Agregar</button>
+    <hr>
+    <button onclick="exportarJSON()">Exportar JSON</button>
+    <button onclick="exportarCSV()">Exportar CSV</button>
+  </div>
+
+  <h2>Productos</h2>
+  <div id="productos"></div>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-storage.js"></script>
+
+  <script>
+    const firebaseConfig = {
+      apiKey: "TU_API_KEY",
+      authDomain: "TU_PROJECT_ID.firebaseapp.com",
+      projectId: "TU_PROJECT_ID",
+      storageBucket: "TU_PROJECT_ID.appspot.com",
+      messagingSenderId: "TU_SENDER_ID",
+      appId: "TU_APP_ID"
+    };
+
+    const app = firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.firestore();
+    const storage = firebase.storage();
+
+    auth.onAuthStateChanged(user => {
+      if (user) {
+        document.getElementById("loginPanel").style.display = "none";
+        document.getElementById("adminPanel").style.display = "block";
+        cargarProductos();
+      } else {
+        document.getElementById("loginPanel").style.display = "block";
+        document.getElementById("adminPanel").style.display = "none";
+      }
+    });
+
+    function register() {
+      const email = document.getElementById("email").value;
+      const password = document.getElementById("password").value;
+      auth.createUserWithEmailAndPassword(email, password).catch(alert);
+    }
+
+    function login() {
+      const email = document.getElementById("email").value;
+      const password = document.getElementById("password").value;
+      auth.signInWithEmailAndPassword(email, password).catch(alert);
+    }
+
+    function logout() {
+      auth.signOut();
+    }
+
+    async function agregarProducto() {
+      const nombre = document.getElementById("nombre").value;
+      const precio = parseFloat(document.getElementById("precio").value);
+      const unidades = parseInt(document.getElementById("unidades").value);
+      const file = document.getElementById("imagen").files[0];
+
+      if (!file) { alert("Selecciona una imagen"); return; }
+      const storageRef = storage.ref("productos/" + file.name);
+      await storageRef.put(file);
+      const url = await storageRef.getDownloadURL();
+
+      await db.collection("productos").add({ nombre, precio, unidades, imagen: url });
+      cargarProductos();
+    }
+
+    function cargarProductos() {
+      const cont = document.getElementById("productos");
+      cont.innerHTML = "";
+      db.collection("productos").get().then(snapshot => {
+        snapshot.forEach(doc => {
+          const data = doc.data();
+          cont.innerHTML += `
+            <div class="producto">
+              <img src="${data.imagen}" alt="${data.nombre}">
+              <h3>${data.nombre}</h3>
+              <p>Precio: $${data.precio}</p>
+              <p>Unidades: ${data.unidades}</p>
+              <button onclick="venderProducto('${doc.id}', ${data.unidades})">Vender</button>
+              <button onclick="eliminarProducto('${doc.id}')">Eliminar</button>
+            </div>
+          `;
+        });
+      });
+    }
+
+    async function venderProducto(id, unidades) {
+      if (unidades > 1) {
+        await db.collection("productos").doc(id).update({ unidades: unidades - 1 });
+      } else {
+        await db.collection("productos").doc(id).delete();
+      }
+      cargarProductos();
+    }
+
+    async function eliminarProducto(id) {
+      await db.collection("productos").doc(id).delete();
+      cargarProductos();
+    }
+
+    async function exportarJSON() {
+      const snapshot = await db.collection("productos").get();
+      const productos = snapshot.docs.map(doc => doc.data());
+      const blob = new Blob([JSON.stringify(productos, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "inventario.json";
+      a.click();
+    }
+
+    async function exportarCSV() {
+      const snapshot = await db.collection("productos").get();
+      const productos = snapshot.docs.map(doc => doc.data());
+      let csv = "Nombre,Precio,Unidades,Imagen\n";
+      productos.forEach(p => {
+        csv += `${p.nombre},${p.precio},${p.unidades},${p.imagen}\n`;
+      });
+      const blob = new Blob([csv], { type: "text/csv" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "inventario.csv";
+      a.click();
+    }
+  </script>
+</body>
+</html>
