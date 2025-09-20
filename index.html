@@ -2,183 +2,159 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Inventario con Firebase</title>
-  <style>
-    body { font-family: Arial, sans-serif; margin: 20px; }
-    .producto { border: 1px solid #ccc; padding: 10px; margin: 10px; display: inline-block; width: 200px; vertical-align: top; }
-    img { max-width: 100%; height: auto; }
-    #adminPanel { display: none; margin-top: 20px; }
-    .hidden { display: none; }
-  </style>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js"></script>
 </head>
 <body>
   <h1>Inventario Digital</h1>
 
-  <!-- Autenticación -->
-  <div id="loginPanel">
-    <h2>Acceso Administrador</h2>
-    <input type="email" id="email" placeholder="Correo"><br>
-    <input type="password" id="password" placeholder="Contraseña"><br>
-    <button onclick="login()">Ingresar</button>
-    <button onclick="register()">Registrar</button>
+  <!-- Login y Registro -->
+  <div id="authSection">
+    <h2>Acceso</h2>
+    <input type="email" id="email" placeholder="Correo">
+    <input type="password" id="password" placeholder="Contraseña">
+    <button id="registerBtn">Registrar</button>
+    <button id="loginBtn">Ingresar</button>
+    <button id="logoutBtn" style="display:none;">Salir</button>
   </div>
 
-  <div id="adminPanel">
+  <!-- Panel de administrador -->
+  <div id="adminPanel" style="display:none;">
     <h2>Panel de Administrador</h2>
-    <button onclick="logout()">Cerrar sesión</button>
-    <h3>Agregar producto</h3>
-    <input type="text" id="nombre" placeholder="Nombre"><br>
-    <input type="number" id="precio" placeholder="Precio"><br>
-    <input type="number" id="unidades" placeholder="Unidades"><br>
-    <input type="file" id="imagen"><br>
-    <button onclick="agregarProducto()">Agregar</button>
+    <input type="text" id="prodName" placeholder="Nombre del producto">
+    <input type="number" id="prodPrice" placeholder="Precio">
+    <input type="number" id="prodQty" placeholder="Cantidad">
+    <input type="text" id="prodImg" placeholder="URL de Imagen">
+    <button id="addProductBtn">Agregar producto</button>
     <hr>
-    <button onclick="exportarJSON()">Exportar JSON</button>
-    <button onclick="exportarCSV()">Exportar CSV</button>
+    <div id="productList"></div>
   </div>
 
-  <h2>Productos</h2>
-  <div id="productos"></div>
+  <!-- Lista de productos para usuarios -->
+  <div id="storeFront">
+    <h2>Productos disponibles</h2>
+    <div id="publicProducts"></div>
+  </div>
 
-  <!-- Firebase SDK -->
-  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-storage.js"></script>
-
-  <script>
-     const firebaseConfig = {
-    apiKey: "AIzaSyA-uZsuRd7wB1WyfxWenkmVOgqWQLLi8Ak",
-    authDomain: "inventario-jgs-33c05.firebaseapp.com",
-    databaseURL: "https://inventario-jgs-33c05-default-rtdb.firebaseio.com",
-    projectId: "inventario-jgs-33c05",
-    storageBucket: "inventario-jgs-33c05.firebasestorage.app",
-    messagingSenderId: "888894726369",
-    appId: "1:888894726369:web:00b58c94c037a352d097a0",
-    measurementId: "G-LCBWQCDW98"
+<script>
+  // Configuración de Firebase (reemplaza con la tuya)
+  const firebaseConfig = {
+    apiKey: "TU_API_KEY",
+    authDomain: "TU_PROJECT_ID.firebaseapp.com",
+    projectId: "TU_PROJECT_ID",
+    storageBucket: "TU_PROJECT_ID.appspot.com",
+    messagingSenderId: "TU_SENDER_ID",
+    appId: "TU_APP_ID"
   };
 
-    const app = firebase.initializeApp(firebaseConfig);
-    const auth = firebase.auth();
-    const db = firebase.firestore();
-    const storage = firebase.storage();
+  // Inicializar Firebase
+  const app = firebase.initializeApp(firebaseConfig);
+  const auth = firebase.auth();
+  const db = firebase.firestore();
 
-    auth.onAuthStateChanged(user => {
-  const adminEmails = ["anasofiaba123@gmail.com"]; // ✅ Lista de admins
+  const adminEmails = ["admin@empresa.com"];
 
-  if (user) {
-    document.getElementById("loginPanel").style.display = "none";
+  // Referencias a elementos
+  const email = document.getElementById("email");
+  const password = document.getElementById("password");
+  const registerBtn = document.getElementById("registerBtn");
+  const loginBtn = document.getElementById("loginBtn");
+  const logoutBtn = document.getElementById("logoutBtn");
+  const adminPanel = document.getElementById("adminPanel");
+  const productList = document.getElementById("productList");
+  const publicProducts = document.getElementById("publicProducts");
 
-    if (adminEmails.includes(user.email)) {
-      // Usuario autorizado como administrador
-      document.getElementById("adminPanel").style.display = "block";
-    } else {
-      // Usuario registrado pero sin permisos de administrador
-      alert("Acceso restringido: solo puedes ver los productos.");
-      document.getElementById("adminPanel").style.display = "none";
-    }
+  // Registro
+  registerBtn.addEventListener("click", () => {
+    auth.createUserWithEmailAndPassword(email.value, password.value)
+      .then(() => alert("Usuario registrado"))
+      .catch(err => alert(err.message));
+  });
 
-    cargarProductos();
-  } else {
-    // Usuario no autenticado → solo ve los productos
-    document.getElementById("loginPanel").style.display = "block";
-    document.getElementById("adminPanel").style.display = "none";
-    cargarProductos();
-  }
-});
+  // Login
+  loginBtn.addEventListener("click", () => {
+    auth.signInWithEmailAndPassword(email.value, password.value)
+      .catch(err => alert(err.message));
+  });
 
+  // Logout
+  logoutBtn.addEventListener("click", () => auth.signOut());
 
-    function register() {
-      const email = document.getElementById("email").value;
-      const password = document.getElementById("password").value;
-      auth.createUserWithEmailAndPassword(email, password).catch(alert);
-    }
-
-    function login() {
-      const email = document.getElementById("email").value;
-      const password = document.getElementById("password").value;
-      auth.signInWithEmailAndPassword(email, password).catch(alert);
-    }
-
-    function logout() {
-      auth.signOut();
-    }
-
-    async function agregarProducto() {
-      const nombre = document.getElementById("nombre").value;
-      const precio = parseFloat(document.getElementById("precio").value);
-      const unidades = parseInt(document.getElementById("unidades").value);
-      const file = document.getElementById("imagen").files[0];
-
-      if (!file) { alert("Selecciona una imagen"); return; }
-      const storageRef = storage.ref("productos/" + file.name);
-      await storageRef.put(file);
-      const url = await storageRef.getDownloadURL();
-
-      await db.collection("productos").add({ nombre, precio, unidades, imagen: url });
-      cargarProductos();
-    }
-
-    function cargarProductos() {
-      const cont = document.getElementById("productos");
-      cont.innerHTML = "";
-      db.collection("productos").get().then(snapshot => {
-        snapshot.forEach(doc => {
-          const data = doc.data();
-          cont.innerHTML += `
-            <div class="producto">
-              <img src="${data.imagen}" alt="${data.nombre}">
-              <h3>${data.nombre}</h3>
-              <p>Precio: $${data.precio}</p>
-              <p>Unidades: ${data.unidades}</p>
-              <button onclick="venderProducto('${doc.id}', ${data.unidades})">Vender</button>
-              <button onclick="eliminarProducto('${doc.id}')">Eliminar</button>
-            </div>
-          `;
-        });
-      });
-    }
-
-    async function venderProducto(id, unidades) {
-      if (unidades > 1) {
-        await db.collection("productos").doc(id).update({ unidades: unidades - 1 });
+  // Estado de autenticación
+  auth.onAuthStateChanged(user => {
+    if (user) {
+      logoutBtn.style.display = "block";
+      if (adminEmails.includes(user.email)) {
+        adminPanel.style.display = "block";
+        cargarProductosAdmin();
       } else {
-        await db.collection("productos").doc(id).delete();
+        adminPanel.style.display = "none";
       }
-      cargarProductos();
+      cargarProductosPublic();
+    } else {
+      logoutBtn.style.display = "none";
+      adminPanel.style.display = "none";
     }
+  });
 
-    async function eliminarProducto(id) {
-      await db.collection("productos").doc(id).delete();
-      cargarProductos();
-    }
+  // Agregar producto
+  document.getElementById("addProductBtn").addEventListener("click", () => {
+    const name = document.getElementById("prodName").value;
+    const price = parseFloat(document.getElementById("prodPrice").value);
+    const qty = parseInt(document.getElementById("prodQty").value);
+    const img = document.getElementById("prodImg").value;
+    db.collection("productos").add({ name, price, qty, img })
+      .then(() => alert("Producto agregado"));
+  });
 
-    async function exportarJSON() {
-      const snapshot = await db.collection("productos").get();
-      const productos = snapshot.docs.map(doc => doc.data());
-      const blob = new Blob([JSON.stringify(productos, null, 2)], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "inventario.json";
-      a.click();
-    }
-
-    async function exportarCSV() {
-      const snapshot = await db.collection("productos").get();
-      const productos = snapshot.docs.map(doc => doc.data());
-      let csv = "Nombre,Precio,Unidades,Imagen\n";
-      productos.forEach(p => {
-        csv += `${p.nombre},${p.precio},${p.unidades},${p.imagen}\n`;
+  // Cargar productos en el panel admin
+  function cargarProductosAdmin() {
+    db.collection("productos").onSnapshot(snapshot => {
+      productList.innerHTML = "";
+      snapshot.forEach(doc => {
+        const data = doc.data();
+        productList.innerHTML += `
+          <div>
+            <b>${data.name}</b> - $${data.price} - Stock: ${data.qty}
+            <button onclick="eliminarProducto('${doc.id}')">Eliminar</button>
+          </div>`;
       });
-      const blob = new Blob([csv], { type: "text/csv" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "inventario.csv";
-      a.click();
+    });
+  }
+
+  // Cargar productos para todos los usuarios
+  function cargarProductosPublic() {
+    db.collection("productos").onSnapshot(snapshot => {
+      publicProducts.innerHTML = "";
+      snapshot.forEach(doc => {
+        const data = doc.data();
+        publicProducts.innerHTML += `
+          <div>
+            <img src="${data.img}" width="100"><br>
+            <b>${data.name}</b><br>$${data.price}<br>
+            Stock: ${data.qty}<br>
+            <button onclick="comprarProducto('${doc.id}', ${data.qty})">Comprar</button>
+          </div>`;
+      });
+    });
+  }
+
+  // Eliminar producto
+  function eliminarProducto(id) {
+    db.collection("productos").doc(id).delete();
+  }
+
+  // Comprar producto (reduce cantidad)
+  function comprarProducto(id, qty) {
+    if (qty > 0) {
+      db.collection("productos").doc(id).update({ qty: qty - 1 });
+    } else {
+      alert("Sin stock disponible");
     }
-  </script>
+  }
+
+</script>
 </body>
 </html>
