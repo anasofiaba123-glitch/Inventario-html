@@ -65,15 +65,29 @@
     const storage = firebase.storage();
 
     auth.onAuthStateChanged(user => {
-      if (user) {
-        document.getElementById("loginPanel").style.display = "none";
-        document.getElementById("adminPanel").style.display = "block";
-        cargarProductos();
-      } else {
-        document.getElementById("loginPanel").style.display = "block";
-        document.getElementById("adminPanel").style.display = "none";
-      }
-    });
+  const adminEmails = ["admin@empresa.com", "soporte@empresa.com"]; // ✅ Lista de admins
+
+  if (user) {
+    document.getElementById("loginPanel").style.display = "none";
+
+    if (adminEmails.includes(user.email)) {
+      // Usuario autorizado como administrador
+      document.getElementById("adminPanel").style.display = "block";
+    } else {
+      // Usuario registrado pero sin permisos de administrador
+      alert("Acceso restringido: solo puedes ver los productos.");
+      document.getElementById("adminPanel").style.display = "none";
+    }
+
+    cargarProductos();
+  } else {
+    // Usuario no autenticado → solo ve los productos
+    document.getElementById("loginPanel").style.display = "block";
+    document.getElementById("adminPanel").style.display = "none";
+    cargarProductos();
+  }
+});
+
 
     function register() {
       const email = document.getElementById("email").value;
